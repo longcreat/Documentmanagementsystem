@@ -2,24 +2,36 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { DocumentList } from './DocumentList';
 import { Button } from './ui/button';
-import { Plus, AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from './ui/alert';
+import { Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 
-export type DocumentCategory = '酒店基础信息' | '房型信息' | '设施信息' | '政策信息' | '自定义类别';
+export type DocumentCategory = '酒店基础信息' | '房型信息' | '设施信息' | '政策信息' | '周边POI' | '自定义类别';
+
+export interface PoiEntry {
+  id: string;
+  tag?: string;
+  name: string;
+  distance: string;
+}
 
 export interface DocumentField {
   key: string;
   label: string;
-  value: string | boolean;
+  value: string | boolean | PoiEntry[] | string[];
   required: boolean;
   placeholder?: string;
-  type?: 'text' | 'textarea' | 'number' | 'boolean';
+  type?: 'text' | 'textarea' | 'number' | 'boolean' | 'boolean-with-options' | 'boolean-with-languages' | 'boolean-with-text' | 'poi-list';
   section?: string; // 字段所属模块
   subsection?: string; // 字段所属子模块
   isCustom?: boolean; // 是否为自定义字段
+  // 收费相关字段（用于boolean-with-options类型）
+  feeStatus?: 'free' | 'charged' | 'conditional' | ''; // 收费状态
+  feeNote?: string; // 收费说明
+  additionalNote?: string; // 额外备注（营业时间、预约方式等）
+  // 语言选择字段（用于boolean-with-languages类型）
+  languages?: string[]; // 支持的语言列表
 }
 
 export interface Document {
@@ -156,20 +168,18 @@ export const getFieldsTemplate = (category: DocumentCategory): DocumentField[] =
       ];
     case '设施信息':
       return [
-        { key: 'facilityName', label: '设施名称', value: '', required: true, placeholder: '例如：健身房', type: 'text', section: '基本信息' },
-        
         // 前台服务
-        { key: 'frontdesk_multilingual', label: '多语言服务', value: '', required: false, placeholder: '例如：中文、英语', type: 'text', section: '前台服务' },
-        { key: 'frontdesk_luggage', label: '行李寄存', value: false, required: false, type: 'boolean', section: '前台服务' },
+        { key: 'frontdesk_multilingual', label: '多语言服务', value: false, required: false, type: 'boolean-with-languages', section: '前台服务', languages: [] },
+        { key: 'frontdesk_luggage', label: '行李寄存', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
         { key: 'frontdesk_24h', label: '24小时前台', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_porter', label: '专职行李员', value: false, required: false, type: 'boolean', section: '前台服务' },
+        { key: 'frontdesk_porter', label: '专职行李员', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
         { key: 'frontdesk_self_checkin', label: '自助入住机', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_locker', label: '储物柜', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_concierge', label: '礼宾服务', value: false, required: false, type: 'boolean', section: '前台服务' },
+        { key: 'frontdesk_locker', label: '储物柜', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
+        { key: 'frontdesk_concierge', label: '礼宾服务', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
         { key: 'frontdesk_eid', label: '电子身份证入住', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_safe', label: '前台贵重物品保险柜', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_wakeup', label: '叫醒服务', value: false, required: false, type: 'boolean', section: '前台服务' },
-        { key: 'frontdesk_currency', label: '外币兑换服务', value: false, required: false, type: 'boolean', section: '前台服务' },
+        { key: 'frontdesk_safe', label: '前台贵重物品保险柜', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
+        { key: 'frontdesk_wakeup', label: '叫醒服务', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
+        { key: 'frontdesk_currency', label: '外币兑换服务', value: false, required: false, type: 'boolean-with-options', section: '前台服务', feeStatus: '', feeNote: '', additionalNote: '' },
         
         // 公共区
         { key: 'public_chinese_sign', label: '中文指示', value: false, required: false, type: 'boolean', section: '公共区' },
@@ -201,7 +211,7 @@ export const getFieldsTemplate = (category: DocumentCategory): DocumentField[] =
         { key: 'accessible_room', label: '无障碍客房', value: false, required: false, type: 'boolean', section: '无障碍设施服务' },
         { key: 'accessible_corridor_rail', label: '走廊扶手', value: false, required: false, type: 'boolean', section: '无障碍设施服务' },
         { key: 'accessible_wheelchair', label: '提供轮椅', value: false, required: false, type: 'boolean', section: '无障碍设施服务' },
-        { key: 'accessible_pool_ramp', label: '提供泳池坡道', value: '', required: false, placeholder: '有泳池的请填写', type: 'text', section: '无障碍设施服务' },
+        { key: 'accessible_pool_ramp', label: '提供泳池坡道', value: false, required: false, placeholder: '有泳池的请填写具体信息', type: 'boolean-with-text', section: '无障碍设施服务', additionalNote: '' },
         
         // 娱乐设施
         { key: 'entertainment_pool', label: '泳池', value: false, required: false, type: 'boolean', section: '娱乐设施', subsection: '泳池' },
@@ -221,15 +231,15 @@ export const getFieldsTemplate = (category: DocumentCategory): DocumentField[] =
         { key: 'entertainment_cinema_fee', label: '收费情况', value: '', required: false, placeholder: '需预约/收费标准', type: 'text', section: '娱乐设施', subsection: '观影房' },
         
         // 交通服务
-        { key: 'transport_airport', label: '专车接机', value: '', required: false, placeholder: '是否收费及收费信息', type: 'text', section: '交通服务' },
-        { key: 'transport_parking', label: '私人停车场', value: '', required: false, placeholder: '是否收费及收费信息', type: 'text', section: '交通服务' },
-        { key: 'transport_shuttle', label: '班车服务', value: '', required: false, placeholder: '是否收费及收费标准', type: 'text', section: '交通服务' },
-        { key: 'transport_station', label: '接站服务', value: '', required: false, placeholder: '是否收费及收费标准', type: 'text', section: '交通服务' },
+        { key: 'transport_airport', label: '专车接机', value: false, required: false, placeholder: '收费信息，如：200元/次', type: 'boolean-with-text', section: '交通服务', additionalNote: '' },
+        { key: 'transport_parking', label: '私人停车场', value: false, required: false, placeholder: '收费信息，如：50元/天', type: 'boolean-with-text', section: '交通服务', additionalNote: '' },
+        { key: 'transport_shuttle', label: '班车服务', value: false, required: false, placeholder: '收费信息及时间', type: 'boolean-with-text', section: '交通服务', additionalNote: '' },
+        { key: 'transport_station', label: '接站服务', value: false, required: false, placeholder: '收费信息', type: 'boolean-with-text', section: '交通服务', additionalNote: '' },
         { key: 'transport_taxi', label: '叫车服务', value: false, required: false, type: 'boolean', section: '交通服务' },
         { key: 'transport_rental', label: '租车服务', value: false, required: false, type: 'boolean', section: '交通服务' },
         
         // 亲子设施
-        { key: 'kids_care', label: '儿童托管', value: '', required: false, placeholder: '是否收费及收费标准', type: 'text', section: '亲子设施' },
+        { key: 'kids_care', label: '儿童托管', value: false, required: false, placeholder: '收费标准', type: 'boolean-with-text', section: '亲子设施', additionalNote: '' },
         { key: 'kids_club', label: '儿童俱乐部', value: false, required: false, type: 'boolean', section: '亲子设施' },
         { key: 'kids_pool', label: '儿童泳池', value: false, required: false, type: 'boolean', section: '亲子设施' },
         { key: 'kids_meal', label: '儿童餐', value: false, required: false, type: 'boolean', section: '亲子设施' },
@@ -346,21 +356,18 @@ export const getFieldsTemplate = (category: DocumentCategory): DocumentField[] =
         { key: 'breakfast_adult_fee', label: '成人加早费用', value: '', required: false, placeholder: '例如：80元/人', type: 'text', section: '早餐' },
         
         // 儿童入住及加床政策
-        { key: 'extrabed_policy', label: '加床政策', value: '', required: false, placeholder: '请详细说明加床政策及费用', type: 'textarea', section: '儿童入住及加床政策' },
-        { key: 'child_breakfast', label: '儿童早餐', value: '', required: false, placeholder: '例如：儿童早餐50元/人', type: 'text', section: '儿童入住及加床政策' },
-        
-        // 周边POI - 美食
-        { key: 'poi_food', label: '周边美食', value: '', required: false, placeholder: '请填写周边美食推荐', type: 'textarea', section: '周边POI', subsection: '美食' },
-        
-        // 周边POI - 景点
-        { key: 'poi_attraction', label: '周边景点', value: '', required: false, placeholder: '请填写周边景点推荐', type: 'textarea', section: '周边POI', subsection: '景点' },
-        
-        // 周边POI - 交通
-        { key: 'poi_transport', label: '周边交通', value: '', required: false, placeholder: '请填写周边交通信息', type: 'textarea', section: '周边POI', subsection: '交通' },
-        
-        // 周边POI - 购物
-        { key: 'poi_shopping', label: '周边购物', value: '', required: false, placeholder: '请填写周边购物信息', type: 'textarea', section: '周边POI', subsection: '购物' },
+        { key: 'childStayPolicy', label: '儿童入住政策', value: '', required: false, placeholder: '例如：0-6岁可免费入住，无需加床', type: 'textarea', section: '儿童入住及加床政策' },
+        { key: 'extraBedPolicy', label: '加床政策', value: '', required: false, placeholder: '请说明可加床人群、收费标准等', type: 'textarea', section: '儿童入住及加床政策' },
+        { key: 'childBreakfastPolicy', label: '儿童早餐政策', value: '', required: false, placeholder: '例如：身高1.2米以下免费，1.2-1.4米半价', type: 'text', section: '儿童入住及加床政策' },
       ];
+    case '周边POI':
+      return [
+        { key: 'poiTraffic', label: '交通出行', value: [], required: false, type: 'poi-list', section: '交通' },
+        { key: 'poiAttractions', label: '城市景点', value: [], required: false, type: 'poi-list', section: '景点' },
+        { key: 'poiFood', label: '餐饮美食', value: [], required: false, type: 'poi-list', section: '美食' },
+        { key: 'poiShopping', label: '购物商圈', value: [], required: false, type: 'poi-list', section: '购物' },
+      ];
+
     case '自定义类别':
       return [
         { key: 'customTitle', label: '标题', value: '', required: true, placeholder: '请输入标题', type: 'text', section: '基本信息' },
@@ -737,12 +744,8 @@ const initialDocuments: Document[] = [
       if (field.key === 'breakfast_cuisine') return { ...field, value: '西式、中式、日式、亚洲菜、欧陆菜' };
       if (field.key === 'breakfast_hours') return { ...field, value: '7:00-10:00' };
       if (field.key === 'breakfast_adult_fee') return { ...field, value: '88元/人' };
-      if (field.key === 'extrabed_policy') return { ...field, value: '可加床，加床费用200元/晚。12岁以下儿童可免费加床（不含早餐）' };
-      if (field.key === 'child_breakfast') return { ...field, value: '儿童早餐50元/人（6-12岁），6岁以下免费' };
-      if (field.key === 'poi_food') return { ...field, value: '周边500米内有大董烤鸭、海底捞火锅、星巴克等' };
-      if (field.key === 'poi_attraction') return { ...field, value: '距离故宫3公里，天安门广场2.5公里，王府井步行街1公里' };
-      if (field.key === 'poi_transport') return { ...field, value: '地铁1号线建国门站步行5分钟，距离北京首都国际机场25公里' };
-      if (field.key === 'poi_shopping') return { ...field, value: '王府井购物中心1公里，国贸商城2公里，SKP商场3公里' };
+      if (field.key === 'extraBedPolicy') return { ...field, value: '可加床，加床费用200元/晚。12岁以下儿童可免费加床（不含早餐）' };
+      if (field.key === 'childBreakfastPolicy') return { ...field, value: '儿童早餐50元/人（6-12岁），6岁以下免费' };
       return field;
     }),
     category: '政策信息',
@@ -796,6 +799,75 @@ const initialDocuments: Document[] = [
     lastModified: new Date('2024-01-21'),
     completeness: 80
   },
+  {
+    id: '9',
+    title: 'CBD周边配套洞察',
+    fields: getFieldsTemplate('周边POI').map(field => {
+      if (field.key === 'poiTraffic') return {
+        ...field,
+        value: [
+          { id: 'traffic-1', tag: '地铁', name: '伊犁路地铁站', distance: '220米' },
+          { id: 'traffic-2', tag: '地铁', name: '红宝石路地铁站-2口', distance: '630米' },
+          { id: 'traffic-3', tag: '机场', name: '上海虹桥国际机场-T1航站楼', distance: '6.6千米' },
+          { id: 'traffic-4', tag: '机场', name: '浦东国际机场', distance: '46千米' },
+          { id: 'traffic-5', tag: '火车站', name: '上海南站', distance: '7.5千米' },
+          { id: 'traffic-6', tag: '火车站', name: '上山西站', distance: '8.2千米' },
+        ]
+      };
+      if (field.key === 'poiAttractions') return {
+        ...field,
+        value: [
+          { id: 'attraction-1', name: '武康路', distance: '3.8千米' },
+          { id: 'attraction-2', name: '东华大学(延安路校区)', distance: '1.3千米' },
+          { id: 'attraction-3', name: '新华路', distance: '1.6千米' },
+          { id: 'attraction-4', name: '上海儿童博物馆', distance: '885米' },
+          { id: 'attraction-5', name: '武康大楼', distance: '3.3千米' },
+          { id: 'attraction-6', name: '上海国际舞蹈中心', distance: '991米' },
+          { id: 'attraction-7', name: '上海宋庆龄故居纪念馆', distance: '3.4千米' },
+          { id: 'attraction-8', name: '上海长风海洋世界', distance: '3.2千米' },
+          { id: 'attraction-9', name: '愚园路历史文化风貌区', distance: '4.7千米' },
+          { id: 'attraction-10', name: '上海国际展览中心', distance: '684米' },
+          { id: 'attraction-11', name: '上海动物园', distance: '4千米' },
+          { id: 'attraction-12', name: '上海乐高探索中心', distance: '3千米' },
+          { id: 'attraction-13', name: '上海消防博物馆', distance: '2.4千米' },
+          { id: 'attraction-14', name: '上海体育场', distance: '4千米' },
+        ]
+      };
+      if (field.key === 'poiFood') return {
+        ...field,
+        value: [
+          { id: 'food-1', name: '上古北禧玥酒店·玛瑙花园', distance: '<100米' },
+          { id: 'food-2', name: 'BELLOCO倍乐(古北店)', distance: '104米' },
+          { id: 'food-3', name: '初花·日本料理(高岛屋店)', distance: '102米' },
+          { id: 'food-4', name: '成隆行·颐丰花园(虹桥店)', distance: '285米' },
+          { id: 'food-5', name: 'GREEN & SAFE(高岛屋店)', distance: '178米' },
+          { id: 'food-6', name: '上海会馆(高岛屋店)', distance: '150米' },
+          { id: 'food-7', name: '麦当劳(高岛屋店)', distance: '219米' },
+          { id: 'food-8', name: '虎连坊日本料理自助餐(国贸店)', distance: '592米' },
+          { id: 'food-9', name: '齐民市集(高岛屋百货店)', distance: '134米' },
+          { id: 'food-10', name: 'Katsukura名藏炸猪排(高岛屋百货店)', distance: '110米' },
+          { id: 'food-11', name: '烧肉万两(高岛屋店)', distance: '107米' },
+          { id: 'food-12', name: '臻之宴', distance: '1千米' },
+        ]
+      };
+      if (field.key === 'poiShopping') return {
+        ...field,
+        value: [
+          { id: 'shopping-1', name: '上高岛屋百货', distance: '130米' },
+          { id: 'shopping-2', name: '上海世贸商城', distance: '674米' },
+          { id: 'shopping-3', name: '虹桥南丰城', distance: '1.2千米' },
+          { id: 'shopping-4', name: '上海尚嘉中心', distance: '1千米' },
+          { id: 'shopping-5', name: '古北1699(虹桥大成商务广场店)', distance: '974米' },
+        ]
+      };
+      return field;
+    }),
+    category: '周边POI',
+    status: 'confirmed',
+    source: '目的地洞察',
+    lastModified: new Date('2024-01-22'),
+    completeness: 100
+  },
 ];
 
 export function DocumentManager() {
@@ -809,14 +881,18 @@ export function DocumentManager() {
     '房型信息',
     '设施信息',
     '政策信息',
+    '周边POI',
     '自定义类别'
   ];
 
   const filteredDocuments = documents.filter(doc => doc.category === activeCategory);
-  const pendingCount = documents.filter(doc => doc.status === 'pending').length;
+  const hotelInfoCount = documents.filter(doc => doc.category === '酒店基础信息').length;
+  const isHotelInfoCategory = activeCategory === '酒店基础信息';
+  const canAddHotelInfo = !isHotelInfoCategory || hotelInfoCount === 0;
 
   const handleAddDocument = () => {
     if (!newDocTitle.trim()) return;
+    if (activeCategory === '酒店基础信息' && hotelInfoCount >= 1) return;
 
     const newDoc: Document = {
       id: Date.now().toString(),
@@ -884,18 +960,9 @@ export function DocumentManager() {
   };
 
   return (
-    <div className="space-y-6">
-      {pendingCount > 0 && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <AlertCircle className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-900">
-            您有 <span className="font-semibold">{pendingCount}</span> 个待确认的文档需要审核和完善
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs value={activeCategory} onValueChange={(value) => setActiveCategory(value as DocumentCategory)} className="space-y-4">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="h-full flex flex-col">
+      <Tabs value={activeCategory} onValueChange={(value: string) => setActiveCategory(value as DocumentCategory)} className="flex-1 flex flex-col">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
           <TabsList className="flex-wrap h-auto">
             {categories.map(category => (
               <TabsTrigger key={category} value={category} className="whitespace-nowrap">
@@ -909,7 +976,7 @@ export function DocumentManager() {
 
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="shrink-0">
+              <Button className="shrink-0" disabled={!canAddHotelInfo}>
                 <Plus className="mr-2 h-4 w-4" />
                 {getAddButtonText(activeCategory)}
               </Button>
@@ -949,7 +1016,7 @@ export function DocumentManager() {
         </div>
 
         {categories.map(category => (
-          <TabsContent key={category} value={category}>
+          <TabsContent key={category} value={category} className="flex-1 overflow-auto">
             <DocumentList
               documents={filteredDocuments}
               onUpdate={handleUpdateDocument}

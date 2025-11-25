@@ -3,7 +3,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Edit, Trash2, CheckCircle, AlertTriangle, ArrowRight } from 'lucide-react';
-import { Document } from './DocumentManager';
+import { Document, PoiEntry } from './DocumentManager';
 import { DocumentEditor } from './DocumentEditor';
 import {
   AlertDialog,
@@ -26,6 +26,16 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
   const [editingDoc, setEditingDoc] = useState<Document | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
+  const asPoiEntries = (field: Document['fields'][number]): PoiEntry[] =>
+    Array.isArray(field.value) ? (field.value as PoiEntry[]) : [];
+
+  const isPoiFieldFilled = (field: Document['fields'][number]) => {
+    if (field.type !== 'poi-list') return false;
+    const entries = asPoiEntries(field);
+    if (entries.length === 0) return false;
+    return entries.every(entry => entry.name?.toString().trim() && entry.distance?.toString().trim());
+  };
+
   const getStatusBadge = (status: Document['status']) => {
     switch (status) {
       case 'pending':
@@ -47,6 +57,11 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
     return doc.fields.filter(field => {
       if (!field.required) return false;
       if (typeof field.value === 'boolean') return false;
+      if (field.type === 'poi-list') {
+        const entries = asPoiEntries(field);
+        if (entries.length === 0) return true;
+        return !entries.every(entry => entry.name?.toString().trim() && entry.distance?.toString().trim());
+      }
       return !field.value.toString().trim();
     });
   };
@@ -82,15 +97,20 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
 
   return (
     <>
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {documents.map(doc => {
           const missingFields = getMissingFields(doc);
           const filledFields = doc.fields.filter(field => {
+            if (field.type === 'poi-list') return isPoiFieldFilled(field);
             if (typeof field.value === 'boolean') return field.value === true;
-            return field.value.toString().trim();
+            return typeof field.value === 'string' ? field.value.trim().length > 0 : false;
           });
-          const textFields = doc.fields.filter(f => f.type !== 'boolean' && f.value.toString().trim());
+          const textFields = doc.fields.filter(f => typeof f.value === 'string' && f.value.trim().length > 0);
           const booleanFields = getFilledBooleanFields(doc);
+          const poiFields = doc.fields.filter(field => isPoiFieldFilled(field));
+          const showFieldPreview = doc.category !== '酒店基础信息';
+          const showImmediateFix = doc.status === 'pending' && missingFields.length > 0;
+          const showEditButton = !showImmediateFix;
 
           return (
             <Card key={doc.id} className="p-6 hover:shadow-md transition-shadow">
@@ -101,34 +121,49 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
                     {getStatusBadge(doc.status)}
                   </div>
 
-                  {/* 字段预览 */}
-                  <div className="space-y-2 mb-4">
-                    {textFields.slice(0, 3).map(field => (
-                      <div key={field.key} className="flex gap-2 text-sm">
-                        <span className="text-gray-600 min-w-24 shrink-0">{field.label}:</span>
-                        <span className="text-gray-900 line-clamp-1">{field.value as string}</span>
-                      </div>
-                    ))}
-                    {booleanFields.length > 0 && (
-                      <div className="flex gap-2 text-sm">
-                        <span className="text-gray-600 min-w-24 shrink-0">已配置设施:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {booleanFields.slice(0, 8).map(field => (
-                            <Badge key={field.key} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                              {field.label}
-                            </Badge>
-                          ))}
-                          {booleanFields.length > 8 && (
-                            <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
-                              +{booleanFields.length - 8}
-                            </Badge>
-                          )}
+                  {showFieldPreview && (
+                    <div className="space-y-2 mb-4">
+                      {textFields.slice(0, 3).map(field => {
+                        const value = typeof field.value === 'string' ? field.value : '';
+                        return (
+                          <div key={field.key} className="flex gap-2 text-sm">
+                            <span className="text-gray-600 min-w-24 shrink-0">{field.label}:</span>
+                            <span className="text-gray-900 line-clamp-1">{value}</span>
+                          </div>
+                        );
+                      })}
+                      {booleanFields.length > 0 && (
+                        <div className="flex gap-2 text-sm">
+                          <span className="text-gray-600 min-w-24 shrink-0">已配置设施:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {booleanFields.slice(0, 8).map(field => (
+                              <Badge key={field.key} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                {field.label}
+                              </Badge>
+                            ))}
+                            {booleanFields.length > 8 && (
+                              <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600">
+                                +{booleanFields.length - 8}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                      {poiFields.length > 0 && (
+                        <div className="flex gap-2 text-sm">
+                          <span className="text-gray-600 min-w-24 shrink-0">周边POI:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {poiFields.map(field => (
+                              <Badge key={field.key} variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                {(field.section || field.label || 'POI')} · {asPoiEntries(field).length}条
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                  {/* 完善度指示器 */}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div
@@ -142,7 +177,6 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
                     <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{doc.completeness}%</span>
                   </div>
 
-                  {/* 缺失字段提示 */}
                   {missingFields.length > 0 && (
                     <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3">
                       <div className="flex items-start gap-2">
@@ -184,7 +218,7 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
                     </Button>
                   )}
                   
-                  {doc.status === 'pending' && missingFields.length > 0 && (
+                  {showImmediateFix && (
                     <Button
                       size="sm"
                       onClick={() => setEditingDoc(doc)}
@@ -195,15 +229,17 @@ export function DocumentList({ documents, onUpdate, onDelete }: DocumentListProp
                     </Button>
                   )}
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditingDoc(doc)}
-                    className="w-full"
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    编辑
-                  </Button>
+                  {showEditButton && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingDoc(doc)}
+                      className="w-full"
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      编辑
+                    </Button>
+                  )}
                   
                   <Button
                     variant="outline"
